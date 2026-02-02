@@ -116,7 +116,33 @@ function detectAndFixCorruptedConfig() {
 
   let fixed = false;
 
-  // Check if clawdbot config exists and is corrupted
+  // First check if the valid config has problematic auth.profiles section
+  // that causes "agents.list: Unrecognized key: provider" errors
+  if (fs.existsSync(clawdbotConfig)) {
+    try {
+      const content = fs.readFileSync(clawdbotConfig, "utf8");
+      const config = JSON.parse(content);
+
+      // Check for auth.profiles section that causes agents.list errors
+      if (config.auth?.profiles) {
+        console.log(`[config-fix] Found problematic auth.profiles section (causes agents.list errors)`);
+        console.log(`[config-fix] Removing auth.profiles to fix schema validation...`);
+
+        delete config.auth.profiles;
+        if (Object.keys(config.auth).length === 0) {
+          delete config.auth;
+        }
+
+        fs.writeFileSync(clawdbotConfig, JSON.stringify(config, null, 2), "utf8");
+        console.log(`[config-fix] ✓ Removed auth.profiles from config`);
+        fixed = true;
+      }
+    } catch (err) {
+      console.error(`[config-fix] Error checking config for auth.profiles: ${err.message}`);
+    }
+  }
+
+  // Check if clawdbot config exists and is corrupted (JSON parse error)
   if (fs.existsSync(clawdbotConfig)) {
     try {
       const content = fs.readFileSync(clawdbotConfig, "utf8");
@@ -126,12 +152,8 @@ function detectAndFixCorruptedConfig() {
       console.error(`[config-fix] ✗ Clawdbot config is corrupted: ${err.message}`);
       console.log(`[config-fix] Attempting to fix corrupted config...`);
 
-      // Create a minimal valid config
+      // Create a minimal valid config WITHOUT auth.profiles (causes agents.list errors)
       const minimalConfig = {
-        meta: {
-          lastTouchedVersion: "2026.2.1",
-          lastTouchedAt: new Date().toISOString()
-        },
         gateway: {
           port: 18789,
           mode: "local",
