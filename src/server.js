@@ -74,6 +74,9 @@ process.env.OPENCLAW_GATEWAY_TOKEN = OPENCLAW_GATEWAY_TOKEN;
 console.log(`[token] Final resolved token: ${OPENCLAW_GATEWAY_TOKEN.slice(0, 16)}... (len: ${OPENCLAW_GATEWAY_TOKEN.length})`);
 console.log(`[token] ========== TOKEN RESOLUTION COMPLETE ==========\n`);
 
+// Run config fix on startup BEFORE any gateway operations
+detectAndFixCorruptedConfig();
+
 // Where the gateway will listen internally (we proxy to it).
 const INTERNAL_GATEWAY_PORT = Number.parseInt(
   process.env.INTERNAL_GATEWAY_PORT ?? "18789",
@@ -96,6 +99,114 @@ function configPath() {
     process.env.OPENCLAW_CONFIG_PATH?.trim() ||
     path.join(STATE_DIR, "openclaw.json")
   );
+}
+
+// Detect and fix corrupted config files on startup
+function detectAndFixCorruptedConfig() {
+  console.log(`[config-fix] ========== STARTING CONFIG CHECK ==========`);
+
+  // The actual config path used by OpenClaw (based on error logs)
+  const clawdbotDir = "/data/.clawdbot";
+  const clawdbotConfig = path.join(clawdbotDir, "moltbot.json");
+  const standardConfig = configPath();
+
+  console.log(`[config-fix] Checking for corrupted configs...`);
+  console.log(`[config-fix]   Clawdbot config: ${clawdbotConfig}`);
+  console.log(`[config-fix]   Standard config: ${standardConfig}`);
+
+  let fixed = false;
+
+  // Check if clawdbot config exists and is corrupted
+  if (fs.existsSync(clawdbotConfig)) {
+    try {
+      const content = fs.readFileSync(clawdbotConfig, "utf8");
+      JSON.parse(content); // Try to parse
+      console.log(`[config-fix] ✓ Clawdbot config is valid JSON`);
+    } catch (err) {
+      console.error(`[config-fix] ✗ Clawdbot config is corrupted: ${err.message}`);
+      console.log(`[config-fix] Attempting to fix corrupted config...`);
+
+      // Create a minimal valid config
+      const minimalConfig = {
+        meta: {
+          lastTouchedVersion: "2026.2.1",
+          lastTouchedAt: new Date().toISOString()
+        },
+        gateway: {
+          port: 18789,
+          mode: "local",
+          bind: "loopback",
+          auth: {
+            mode: "token",
+            token: OPENCLAW_GATEWAY_TOKEN
+          },
+          controlUi: {
+            allowInsecureAuth: true
+          }
+        },
+        agents: {
+          defaults: {
+            model: {
+              primary: "zai/glm-4.7"
+            },
+            models: {
+              "zai/glm-4.7": {
+                alias: "GLM"
+              }
+            },
+            workspace: "/data/workspace",
+            contextPruning: {
+              mode: "cache-ttl",
+              ttl: "1h"
+            },
+            compaction: {
+              mode: "safeguard"
+            },
+            heartbeat: {
+              every: "30m"
+            },
+            maxConcurrent: 4,
+            subagents: {
+              maxConcurrent: 8
+            }
+          }
+        }
+      };
+
+      try {
+        fs.mkdirSync(clawdbotDir, { recursive: true });
+        fs.writeFileSync(clawdbotConfig, JSON.stringify(minimalConfig, null, 2), "utf8");
+        console.log(`[config-fix] ✓ Fixed corrupted config at ${clawdbotConfig}`);
+        fixed = true;
+      } catch (writeErr) {
+        console.error(`[config-fix] ✗ Failed to write fixed config: ${writeErr.message}`);
+      }
+    }
+  } else {
+    console.log(`[config-fix] No clawdbot config found at ${clawdbotConfig}`);
+  }
+
+  // Also check standard config
+  if (fs.existsSync(standardConfig)) {
+    try {
+      const content = fs.readFileSync(standardConfig, "utf8");
+      JSON.parse(content);
+      console.log(`[config-fix] ✓ Standard config is valid JSON`);
+    } catch (err) {
+      console.error(`[config-fix] ✗ Standard config is corrupted: ${err.message}`);
+      // Delete corrupted standard config so it gets regenerated
+      try {
+        fs.rmSync(standardConfig, { force: true });
+        console.log(`[config-fix] ✓ Deleted corrupted standard config`);
+        fixed = true;
+      } catch (rmErr) {
+        console.error(`[config-fix] ✗ Failed to delete: ${rmErr.message}`);
+      }
+    }
+  }
+
+  console.log(`[config-fix] ========== CONFIG CHECK COMPLETE (fixed: ${fixed}) ==========`);
+  return fixed;
 }
 
 function isConfigured() {
