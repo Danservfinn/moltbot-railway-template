@@ -116,16 +116,16 @@ function detectAndFixCorruptedConfig() {
 
   let fixed = false;
 
-  // First check if the valid config has problematic auth.profiles section
-  // that causes "agents.list: Unrecognized key: provider" errors
+  // Fix corrupted config by removing invalid keys that fail OpenClaw schema validation
+  // Based on official docs: https://docs.openclaw.ai/gateway/configuration
   if (fs.existsSync(clawdbotConfig)) {
     try {
       const content = fs.readFileSync(clawdbotConfig, "utf8");
       const config = JSON.parse(content);
 
-      // Check for auth.profiles section that causes agents.list errors
+      // Fix 1: Remove auth.profiles (causes validation errors in some contexts)
       if (config.auth?.profiles) {
-        console.log(`[config-fix] Found problematic auth.profiles section (causes agents.list errors)`);
+        console.log(`[config-fix] Found problematic auth.profiles section`);
         console.log(`[config-fix] Removing auth.profiles to fix schema validation...`);
 
         delete config.auth.profiles;
@@ -133,12 +133,31 @@ function detectAndFixCorruptedConfig() {
           delete config.auth;
         }
 
-        fs.writeFileSync(clawdbotConfig, JSON.stringify(config, null, 2), "utf8");
-        console.log(`[config-fix] ✓ Removed auth.profiles from config`);
         fixed = true;
       }
+
+      // Fix 2: Remove invalid "provider" keys from agents.list entries
+      // Per OpenClaw schema, agents.list[] entries should NOT have a "provider" key
+      // Valid keys: id, default, name, workspace, agentDir, model, identity, groupChat, sandbox, tools, subagents
+      if (config.agents?.list && Array.isArray(config.agents.list)) {
+        for (let i = 0; i < config.agents.list.length; i++) {
+          const agent = config.agents.list[i];
+          if (agent?.provider) {
+            console.log(`[config-fix] Found invalid "provider" key in agents.list[${i}]`);
+            console.log(`[config-fix] Removing "provider" key (not valid in agents.list per schema)...`);
+            delete config.agents.list[i].provider;
+            fixed = true;
+          }
+        }
+      }
+
+      // Write the fixed config back if we made changes
+      if (fixed) {
+        fs.writeFileSync(clawdbotConfig, JSON.stringify(config, null, 2), "utf8");
+        console.log(`[config-fix] ✓ Wrote fixed config to ${clawdbotConfig}`);
+      }
     } catch (err) {
-      console.error(`[config-fix] Error checking config for auth.profiles: ${err.message}`);
+      console.error(`[config-fix] Error checking config: ${err.message}`);
     }
   }
 
