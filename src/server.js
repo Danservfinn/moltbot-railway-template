@@ -123,6 +123,15 @@ function detectAndFixCorruptedConfig() {
       const content = fs.readFileSync(clawdbotConfig, "utf8");
       const config = JSON.parse(content);
 
+      // Debug: log what we found
+      console.log(`[config-fix] Config parsed, keys:`, Object.keys(config));
+      if (config.agents) {
+        console.log(`[config-fix] agents keys:`, Object.keys(config.agents));
+        if (config.agents.list) {
+          console.log(`[config-fix] agents.list length:`, config.agents.list.length);
+        }
+      }
+
       // Fix 1: Remove auth.profiles (causes validation errors in some contexts)
       if (config.auth?.profiles) {
         console.log(`[config-fix] Found problematic auth.profiles section`);
@@ -140,8 +149,11 @@ function detectAndFixCorruptedConfig() {
       // Per OpenClaw schema, agents.list[] entries should NOT have a "provider" key
       // Valid keys: id, default, name, workspace, agentDir, model, identity, groupChat, sandbox, tools, subagents
       if (config.agents?.list && Array.isArray(config.agents.list)) {
+        console.log(`[config-fix] Checking ${config.agents.list.length} agents.list entries for invalid keys...`);
         for (let i = 0; i < config.agents.list.length; i++) {
           const agent = config.agents.list[i];
+          const keys = Object.keys(agent || {});
+          console.log(`[config-fix] agents.list[${i}] keys:`, keys);
           if (agent?.provider) {
             console.log(`[config-fix] Found invalid "provider" key in agents.list[${i}]`);
             console.log(`[config-fix] Removing "provider" key (not valid in agents.list per schema)...`);
@@ -151,10 +163,31 @@ function detectAndFixCorruptedConfig() {
         }
       }
 
+      // Fix 3: If agents.list exists but is causing issues, remove it entirely
+      // (agents.defaults is sufficient for single-agent setups)
+      if (config.agents?.list && config.agents.list.length > 0) {
+        // Check if any entry has invalid keys
+        const hasInvalidKeys = config.agents.list.some(agent =>
+          agent && Object.keys(agent).some(key =>
+            !['id', 'default', 'name', 'workspace', 'agentDir', 'model',
+              'identity', 'groupChat', 'sandbox', 'tools', 'subagents',
+              'heartbeat', 'humanDelay', 'allowAgents', 'tools'].includes(key)
+          )
+        );
+
+        if (hasInvalidKeys) {
+          console.log(`[config-fix] agents.list contains invalid keys, removing entire array...`);
+          delete config.agents.list;
+          fixed = true;
+        }
+      }
+
       // Write the fixed config back if we made changes
       if (fixed) {
         fs.writeFileSync(clawdbotConfig, JSON.stringify(config, null, 2), "utf8");
         console.log(`[config-fix] ✓ Wrote fixed config to ${clawdbotConfig}`);
+      } else {
+        console.log(`[config-fix] No fixes needed - config appears valid`);
       }
     } catch (err) {
       console.error(`[config-fix] Error checking config: ${err.message}`);
