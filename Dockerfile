@@ -69,14 +69,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 # Configure tinyproxy for Signal server access
-# Listen on localhost, allow connections from localhost, enable upstream DNS
-RUN echo "Listen 127.0.0.1:8888" > /etc/tinyproxy/tinyproxy.conf \
-  && echo "Allow 127.0.0.1" >> /etc/tinyproxy/tinyproxy.conf \
-  && echo "DisableViaHeader Yes" >> /etc/tinyproxy/tinyproxy.conf \
-  && echo "Timeout 60" >> /etc/tinyproxy/tinyproxy.conf \
-  && echo "MaxClients 100" >> /etc/tinyproxy/tinyproxy.conf \
-  && echo "MinSpareServers 2" >> /etc/tinyproxy/tinyproxy.conf \
-  && echo "MaxSpareServers 5" >> /etc/tinyproxy/tinyproxy.conf
+# Write a complete tinyproxy configuration file
+RUN printf '# tinyproxy configuration\nListen 127.0.0.1:8888\nTimeout 60\nDefaultErrorFile "/usr/share/tinyproxy/default.html"\nStatFile "/usr/share/tinyproxy/stats.html"\nLogfile "STDERR"\nLogLevel Info\nMaxClients 100\nMinSpareServers 2\nMaxSpareServers 5\nStartServers 2\nMaxRequestsPerChild 0\nAllow 127.0.0.1\nDisableViaHeader Yes\n' > /etc/tinyproxy/tinyproxy.conf
 
 # Configure Java to use the tinyproxy for HTTP/HTTPS connections
 # This allows signal-cli to reach Signal's servers via the proxy
