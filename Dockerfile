@@ -42,6 +42,12 @@ RUN pnpm ui:install && pnpm ui:build
 FROM node:22-bookworm
 ENV NODE_ENV=production
 
+# Configure Google DNS to resolve Signal's servers (Railway's DNS fails to resolve textsecure-service.whispersystems.org)
+RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf \
+  && echo "nameserver 8.8.4.4" >> /etc/resolv.conf \
+  && echo "options rotate" >> /etc/resolv.conf \
+  && echo "options timeout:1" >> /etc/resolv.conf
+
 # Install Java JRE (required for signal-cli) and other dependencies
 # Using default-jre (Java 17) which is compatible with signal-cli 0.12.8
 RUN apt-get update \
