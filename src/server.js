@@ -1033,44 +1033,91 @@ app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
 });
 
 // Temporary endpoint to generate Signal link QR code in the running service
+// Uses SSE to keep connection alive while link process runs
 // Note: Auth temporarily disabled for quick access
 app.get("/setup/api/signal-link", async (_req, res) => {
-  try {
-    console.log(`[signal-link] Generating Signal link URL...`);
+  console.log(`[signal-link] Starting SSE link endpoint...`);
 
-    // Use the existing runCmd function which waits for command completion
-    const result = await new Promise((resolve) => {
-      const proc = childProcess.spawn("signal-cli", ["link", "-n", "OpenClaw"], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          XDG_DATA_HOME: '/data',
-        }
-      });
+  // Set SSE headers
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
 
-      let stdout = "";
-      let stderr = "";
+  // Start signal-cli link process
+  const linkProc = childProcess.spawn("signal-cli", ["link", "-n", "OpenClaw"], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      XDG_DATA_HOME: '/data',
+    }
+  });
 
-      proc.stdout.on("data", (d) => stdout += d);
-      proc.stderr.on("data", (d) => stderr += d);
+  let sentUrl = false;
 
-      proc.on("close", (code) => {
-        resolve({ code, output: stdout + stderr });
-      });
+  linkProc.stdout.on("data", (data) => {
+    const text = data.toString();
+    console.log(`[signal-link] stdout:`, text.trim());
 
-      // Kill after 10 seconds since we just need the URL
-      setTimeout(() => proc.kill(), 10000);
-    });
+    // Check for link URL
+    const match = text.match(/(sgnl:\/\/linkdevice\?[^\s\n]+)/);
+    if (match && !sentUrl) {
+      sentUrl = true;
+      res.write(`event: link_url\n`);
+      res.write(`data: ${match[1]}\n\n`);
+      console.log(`[signal-link] Sent link URL to client`);
+    }
 
-    console.log(`[signal-link] signal-cli output:`, result.output);
+    // Forward any other output
+    if (text.trim()) {
+      res.write(`event: log\n`);
+      res.write(`data: ${text.trim()}\n\n`);
+    }
+  });
 
-    // Return the raw output as text
-    res.set("Content-Type", "text/plain");
-    res.send(result.output.trim());
-  } catch (err) {
-    console.error(`[signal-link] Error:`, err);
-    res.status(500).send(String(err));
-  }
+  linkProc.stderr.on("data", (data) => {
+    const text = data.toString();
+    console.log(`[signal-link] stderr:`, text.trim());
+    res.write(`event: log\n`);
+    res.write(`data: ${text.trim()}\n\n`);
+  });
+
+  linkProc.on("close", (code) => {
+    console.log(`[signal-link] Process exited with code ${code}`);
+    res.write(`event: closed\n`);
+    res.write(`data: Process exited (code: ${code})\n\n`);
+    res.end();
+  });
+
+  linkProc.on("error", (err) => {
+    console.error(`[signal-link] Process error:`, err);
+    res.write(`event: error\n`);
+    res.write(`data: ${err.message}\n\n`);
+    res.end();
+  });
+
+  // Keep alive for 5 minutes
+  const keepAlive = setInterval(() => {
+    res.write(`: keep-alive\n\n`);
+  }, 30000);
+
+  // Cleanup after timeout
+  setTimeout(() => {
+    clearInterval(keepAlive);
+    if (!linkProc.killed) {
+      console.log(`[signal-link] Timeout, killing process`);
+      linkProc.kill();
+    }
+    if (!res.writableEnded) {
+      res.write(`event: timeout\n`);
+      res.write(`data: Timeout - please try again\n\n`);
+      res.end();
+    }
+  }, 5 * 60 * 1000);
+
+  res.on("close", () => {
+    clearInterval(keepAlive);
+    if (!linkProc.killed) linkProc.kill();
+  });
 });
 
 app.get("/setup/export", requireSetupAuth, async (_req, res) => {
