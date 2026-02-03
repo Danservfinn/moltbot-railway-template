@@ -43,7 +43,7 @@ FROM node:22-bookworm
 ENV NODE_ENV=production
 
 # Install Java JRE (required for signal-cli) and other dependencies
-# signal-cli 0.13.x requires Java 21
+# Using default-jre (Java 17) which is compatible with signal-cli 0.12.8
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -58,12 +58,13 @@ RUN apt-get update \
     python3 \
     pkg-config \
     sudo \
-    openjdk-21-jre \
+    default-jre \
   && rm -rf /var/lib/apt/lists/*
 
 # Install signal-cli (for Signal channel support)
-# Uses the official release from GitHub for consistent versioning
-ARG SIGNAL_CLI_VERSION=0.13.4
+# Version 0.12.8 is the last version supporting Java 17
+# 0.13.x requires Java 21 which is not available in Debian bookworm
+ARG SIGNAL_CLI_VERSION=0.12.8
 RUN curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}.tar.gz" \
     | tar -xz -C /opt \
   && ln -sf "/opt/signal-cli-${SIGNAL_CLI_VERSION}/bin/signal-cli" /usr/local/bin/signal-cli \
