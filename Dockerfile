@@ -96,7 +96,8 @@ RUN NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.co
 
 USER root
 RUN chown -R root:root /home/linuxbrew/.linuxbrew
-ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
+# Ensure /usr/local/bin is FIRST in PATH so our signal-cli native build takes precedence over Homebrew's
+ENV PATH="/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
 
 WORKDIR /app
 
