@@ -46,8 +46,9 @@ ENV NODE_ENV=production
 # tinyproxy handles HTTPS CONNECT and uses Google DNS (8.8.8.8) to resolve Signal's servers
 # This bypasses Railway's DNS which cannot resolve textsecure-service.whispersystems.org
 # Using default-jre (Java 17) which is compatible with signal-cli 0.12.8
+# Force cache bust: 2026-02-03-22:30
 RUN apt-get update \
-  && DEBIAN FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     build-essential \
