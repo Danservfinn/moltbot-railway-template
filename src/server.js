@@ -529,6 +529,8 @@ app.get("/setup/signal-link", (_req, res) => {
     .success { color: #4ade80; }
     .error { color: #ef4444; }
     #linktext { word-break: break-all; background: #333; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 11px; }
+    #restartBtn { display: none; margin: 20px auto; padding: 15px 30px; font-size: 16px; background: #4ade80; color: #000; border: none; border-radius: 8px; cursor: pointer; }
+    #restartBtn:hover { background: #22c55e; }
   </style>
 </head>
 <body>
@@ -537,6 +539,7 @@ app.get("/setup/signal-link", (_req, res) => {
   <div id="qrcode"></div>
   <p id="linktext" style="display:none;"></p>
   <p>Open Signal → Settings → Linked Devices → Link New Device → Scan QR Code</p>
+  <button id="restartBtn" onclick="restartGateway()">🔄 Restart Gateway to Apply</button>
   <div id="logs" style="text-align: left; max-width: 600px; margin: 20px auto; font-family: monospace; font-size: 12px; color: #888;"></div>
 
   <script>
@@ -544,6 +547,7 @@ app.get("/setup/signal-link", (_req, res) => {
     const logs = document.getElementById('logs');
     const qrdiv = document.getElementById('qrcode');
     const linktext = document.getElementById('linktext');
+    const restartBtn = document.getElementById('restartBtn');
     let qrGenerated = false;
 
     const evtSource = new EventSource('/setup/api/signal-link');
@@ -561,6 +565,20 @@ app.get("/setup/signal-link", (_req, res) => {
       // Use Google Charts QR Code API (reliable, no JS library needed)
       const apiUrl = 'https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=' + encodeURIComponent(url);
       qrdiv.innerHTML = '<img src="' + apiUrl + '" alt="QR Code" style="display:block;margin:0 auto;">';
+    });
+
+    evtSource.addEventListener('associated', (e) => {
+      status.textContent = '✅ Account associated! Click Restart button below.';
+      status.className = 'status success';
+      logs.textContent += '\\n✅ ' + e.data + '\\n';
+      restartBtn.style.display = 'block';
+    });
+
+    evtSource.addEventListener('success', (e) => {
+      status.textContent = '✅ Signal account linked! Click Restart button.';
+      status.className = 'status success';
+      logs.textContent += '\\n✅ ' + e.data + '\\n';
+      restartBtn.style.display = 'block';
     });
 
     evtSource.addEventListener('log', (e) => {
@@ -588,6 +606,32 @@ app.get("/setup/signal-link", (_req, res) => {
         status.className = 'status error';
       }
     };
+
+    async function restartGateway() {
+      restartBtn.disabled = true;
+      restartBtn.textContent = '⏳ Restarting...';
+      status.textContent = '⏳ Restarting gateway...';
+
+      try {
+        const res = await fetch('/setup/api/signal-restart', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          status.textContent = '✅ Gateway restarted! Signal should now be working.';
+          status.className = 'status success';
+          restartBtn.textContent = '✅ Done';
+        } else {
+          status.textContent = '❌ Restart failed: ' + data.error;
+          status.className = 'status error';
+          restartBtn.disabled = false;
+          restartBtn.textContent = '🔄 Try Again';
+        }
+      } catch (err) {
+        status.textContent = '❌ Error: ' + err.message;
+        status.className = 'status error';
+        restartBtn.disabled = false;
+        restartBtn.textContent = '🔄 Try Again';
+      }
+    }
   </script>
 </body>
 </html>`);
@@ -1122,8 +1166,17 @@ app.get("/setup/api/signal-link", async (_req, res) => {
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
-  // Start signal-cli link process
-  const linkProc = childProcess.spawn("signal-cli", ["link", "-n", "OpenClaw"], {
+  // Ensure signal-cli data directory exists
+  const signalDataDir = "/data/.local/share/signal-cli";
+  try {
+    fs.mkdirSync(signalDataDir, { recursive: true });
+    console.log(`[signal-link] Created data directory: ${signalDataDir}`);
+  } catch (err) {
+    console.log(`[signal-link] Data directory exists or error: ${err.message}`);
+  }
+
+  // Start signal-cli link process with explicit data directory
+  const linkProc = childProcess.spawn("signal-cli", ["--config", signalDataDir, "link", "-n", "OpenClaw"], {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
@@ -1132,6 +1185,7 @@ app.get("/setup/api/signal-link", async (_req, res) => {
   });
 
   let sentUrl = false;
+  let associated = false;
 
   linkProc.stdout.on("data", (data) => {
     const text = data.toString();
@@ -1146,6 +1200,22 @@ app.get("/setup/api/signal-link", async (_req, res) => {
       console.log(`[signal-link] Sent link URL to client`);
     }
 
+    // Check for successful association
+    if (text.includes("Associated with:") && !associated) {
+      associated = true;
+      res.write(`event: associated\n`);
+      res.write(`data: ${text.trim()}\n\n`);
+      console.log(`[signal-link] Account associated successfully!`);
+
+      // Keep process alive a bit longer to ensure data is written
+      setTimeout(() => {
+        if (!linkProc.killed) {
+          console.log(`[signal-link] Association complete, terminating process`);
+          linkProc.kill();
+        }
+      }, 5000);
+    }
+
     // Forward any other output
     if (text.trim()) {
       res.write(`event: log\n`);
@@ -1156,14 +1226,28 @@ app.get("/setup/api/signal-link", async (_req, res) => {
   linkProc.stderr.on("data", (data) => {
     const text = data.toString();
     console.log(`[signal-link] stderr:`, text.trim());
+
+    // Check for association on stderr too
+    if (text.includes("Associated with:") && !associated) {
+      associated = true;
+      res.write(`event: associated\n`);
+      res.write(`data: Account associated!\n\n`);
+      console.log(`[signal-link] Account associated successfully!`);
+    }
+
     res.write(`event: log\n`);
     res.write(`data: ${text.trim()}\n\n`);
   });
 
   linkProc.on("close", (code) => {
     console.log(`[signal-link] Process exited with code ${code}`);
-    res.write(`event: closed\n`);
-    res.write(`data: Process exited (code: ${code})\n\n`);
+    if (associated) {
+      res.write(`event: success\n`);
+      res.write(`data: Signal account linked! Restarting gateway...\n\n`);
+    } else {
+      res.write(`event: closed\n`);
+      res.write(`data: Process exited (code: ${code})\n\n`);
+    }
     res.end();
   });
 
@@ -1197,6 +1281,24 @@ app.get("/setup/api/signal-link", async (_req, res) => {
     clearInterval(keepAlive);
     if (!linkProc.killed) linkProc.kill();
   });
+});
+
+// Endpoint to restart gateway after Signal linking
+app.post("/setup/api/signal-restart", async (_req, res) => {
+  try {
+    console.log(`[signal-restart] Restarting gateway to pick up Signal registration...`);
+
+    // Kill and restart the gateway
+    await restartGateway();
+
+    // Wait a bit for the Signal channel to initialize
+    await sleep(5000);
+
+    res.json({ ok: true, message: "Gateway restarted. Check Signal channel status." });
+  } catch (err) {
+    console.error(`[signal-restart] Error:`, err);
+    res.status(500).json({ ok: false, error: String(err) });
+  }
 });
 
 app.get("/setup/export", requireSetupAuth, async (_req, res) => {
