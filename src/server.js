@@ -1283,6 +1283,32 @@ app.get("/setup/api/signal-link", async (_req, res) => {
   });
 });
 
+// Test network connectivity to Signal servers
+app.get("/setup/api/signal-test", async (_req, res) => {
+  try {
+    const https = await import('https');
+    const results = {};
+
+    const testUrl = (url) => new Promise((resolve) => {
+      const timer = setTimeout(() => resolve({ url, status: 'TIMEOUT' }), 10000);
+      https.get(url, (resp) => {
+        clearTimeout(timer);
+        resolve({ url, status: resp.statusCode || 'CONNECTED' });
+      }).on('error', (err) => {
+        clearTimeout(timer);
+        resolve({ url, status: 'ERROR: ' + err.message });
+      });
+    });
+
+    results.signal = await testUrl('https://textsecure-service.whispersystems.org');
+    results.google = await testUrl('https://www.google.com');
+
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // Endpoint to restart gateway after Signal linking
 app.post("/setup/api/signal-restart", async (_req, res) => {
   try {
