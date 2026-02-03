@@ -42,6 +42,7 @@ RUN pnpm ui:install && pnpm ui:build
 FROM node:22-bookworm
 ENV NODE_ENV=production
 
+# Install Java JRE (required for signal-cli) and other dependencies
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -56,7 +57,16 @@ RUN apt-get update \
     python3 \
     pkg-config \
     sudo \
+    default-jre \
   && rm -rf /var/lib/apt/lists/*
+
+# Install signal-cli (for Signal channel support)
+# Uses the official release from GitHub for consistent versioning
+ARG SIGNAL_CLI_VERSION=0.13.4
+RUN curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}.tar.gz" \
+    | tar -xz -C /opt \
+  && ln -sf "/opt/signal-cli-${SIGNAL_CLI_VERSION}/bin/signal-cli" /usr/local/bin/signal-cli \
+  && signal-cli --version
 
 # Install Homebrew (must run as non-root user)
 # Create a user for Homebrew installation, install it, then make it accessible to all users
