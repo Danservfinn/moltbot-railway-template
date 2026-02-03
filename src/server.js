@@ -521,7 +521,6 @@ app.get("/setup/signal-link", (_req, res) => {
 <html>
 <head>
   <title>Signal Link</title>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; background: #1a1a1a; color: #fff; }
     #qrcode { margin: 20px auto; display: block; background: white; padding: 20px; border-radius: 10px; }
@@ -529,19 +528,22 @@ app.get("/setup/signal-link", (_req, res) => {
     .waiting { color: #ffa500; }
     .success { color: #4ade80; }
     .error { color: #ef4444; }
+    #linktext { word-break: break-all; background: #333; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 11px; }
   </style>
 </head>
 <body>
   <h1>🔗 Signal Device Link</h1>
   <p class="status waiting" id="status">Connecting to Signal...</p>
-  <canvas id="qrcode" width="300" height="300"></canvas>
+  <div id="qrcode"></div>
+  <p id="linktext" style="display:none;"></p>
   <p>Open Signal → Settings → Linked Devices → Link New Device → Scan QR Code</p>
   <div id="logs" style="text-align: left; max-width: 600px; margin: 20px auto; font-family: monospace; font-size: 12px; color: #888;"></div>
 
   <script>
     const status = document.getElementById('status');
     const logs = document.getElementById('logs');
-    const canvas = document.getElementById('qrcode');
+    const qrdiv = document.getElementById('qrcode');
+    const linktext = document.getElementById('linktext');
     let qrGenerated = false;
 
     const evtSource = new EventSource('/setup/api/signal-link');
@@ -552,13 +554,13 @@ app.get("/setup/signal-link", (_req, res) => {
       const url = e.data;
       status.textContent = '✅ QR Code ready! Scan now within 5 minutes.';
       status.className = 'status success';
-      logs.textContent = 'Link URL: ' + url + '\\n';
-      QRCode.toCanvas(canvas, url, { width: 300 }, (error) => {
-        if (error) {
-          status.textContent = 'Error generating QR code';
-          status.className = 'status error';
-        }
-      });
+      logs.textContent = 'Link URL generated\\n';
+      linktext.textContent = url;
+      linktext.style.display = 'block';
+
+      // Use Google Charts QR Code API (reliable, no JS library needed)
+      const apiUrl = 'https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=' + encodeURIComponent(url);
+      qrdiv.innerHTML = '<img src="' + apiUrl + '" alt="QR Code" style="display:block;margin:0 auto;">';
     });
 
     evtSource.addEventListener('log', (e) => {
