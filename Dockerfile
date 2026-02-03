@@ -41,8 +41,8 @@ RUN pnpm ui:install && pnpm ui:build
 # Runtime image
 FROM node:22-bookworm
 ENV NODE_ENV=production
-# Force Docker layer cache invalidation for dependencies installation
-ARG CACHEBUST=2026-02-03-22-35
+# Force Docker layer cache invalidation - updated to break Railway cache
+ARG CACHEBUST=2026-02-03-23-05
 
 # Install Java JRE, tinyproxy (for Signal DNS resolution), and other dependencies
 # tinyproxy handles HTTPS CONNECT and uses Google DNS (8.8.8.8) to resolve Signal's servers
@@ -70,7 +70,10 @@ RUN apt-get update \
 
 # Configure tinyproxy for Signal server access
 # Use only Port directive (Listen is not compatible with Port)
-RUN printf 'Port 8888\nTimeout 600\nLogLevel Info\nMaxClients 100\nMinSpareServers 2\nMaxSpareServers 5\nStartServers 2\nAllow 127.0.0.1\nDisableViaHeader Yes\n' > /etc/tinyproxy/tinyproxy.conf
+RUN printf 'Port 8888\nTimeout 600\nLogLevel Info\nMaxClients 100\nMinSpareServers 2\nMaxSpareServers 5\nStartServers 2\nAllow 127.0.0.1\nDisableViaHeader Yes\n' > /etc/tinyproxy/tinyproxy.conf \
+  && cat /etc/tinyproxy/tinyproxy.conf
+# Force new layer with LABEL
+LABEL tinyproxy.configured="2026-02-03-23-05"
 
 # Configure Java to use the tinyproxy for HTTP/HTTPS connections
 # This allows signal-cli to reach Signal's servers via the proxy
