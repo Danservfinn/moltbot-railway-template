@@ -77,15 +77,14 @@ LABEL tinyproxy.configured="2026-02-03-06-00"
 # Native build does NOT require Java runtime!
 # Version 0.13.18 using Linux-native.tar.gz for precompiled binary
 # Note: Native build extracts to a single binary file at /opt/signal-cli, not a directory
-# Force rebuild 2026-02-03-06-25 - must bust cache!
+# Force rebuild 2026-02-03-06-30-v2 - change cachebuster path
 ARG SIGNAL_CLI_VERSION=0.13.18
-# Run a no-op command that changes every build to force cache invalidation
-ARG CACHEBUST_SIGNAL_CLI=2026-02-03-06-25
-RUN curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}-Linux-native.tar.gz" \
+RUN rm -rf /opt/signal-cli* /usr/local/bin/signal-cli 2>/dev/null; \
+  curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}-Linux-native.tar.gz" \
     | tar -xz -C /opt \
   && ln -sf /opt/signal-cli /usr/local/bin/signal-cli \
   && /usr/local/bin/signal-cli --version \
-  && echo "signal-cli ${SIGNAL_CLI_VERSION} native build installed at ${CACHEBUST_SIGNAL_CLI}"
+  && echo "signal-cli 0.13.18 native build installed 2026-02-03-06-30-v2"
 
 # Install Homebrew (must run as non-root user)
 # Create a user for Homebrew installation, install it, then make it accessible to all users
