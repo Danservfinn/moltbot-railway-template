@@ -43,6 +43,7 @@ FROM node:22-bookworm
 ENV NODE_ENV=production
 
 # Install Java JRE (required for signal-cli) and other dependencies
+# signal-cli 0.13.4 requires Java 11, not the newer Java 17+ from default-jre
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -57,7 +58,7 @@ RUN apt-get update \
     python3 \
     pkg-config \
     sudo \
-    default-jre \
+    openjdk-11-jre \
   && rm -rf /var/lib/apt/lists/*
 
 # Install signal-cli (for Signal channel support)
