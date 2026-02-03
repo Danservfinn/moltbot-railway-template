@@ -1034,16 +1034,77 @@ app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
 
 // Temporary endpoint to generate Signal link QR code in the running service
 // Note: Auth temporarily disabled for quick access
+// This endpoint starts signal-cli daemon and keeps link process alive for 5 minutes
 app.get("/setup/api/signal-link", async (_req, res) => {
   try {
-    console.log(`[signal-link] Generating Signal link URL...`);
-    // Run signal-cli link command
-    const result = await runCmd("signal-cli", ["link", "-n", "OpenClaw"]);
-    console.log(`[signal-link] signal-cli output:`, result.output);
+    console.log(`[signal-link] Starting Signal link process...`);
 
-    // Return the raw output as text (JSON was causing encoding issues with &)
-    res.set("Content-Type", "text/plain");
-    res.send(result.output.trim());
+    // Start signal-cli link in background and keep it running
+    const linkProc = childProcess.spawn("signal-cli", ["link", "-n", "OpenClaw"], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        XDG_DATA_HOME: '/data',
+      }
+    });
+
+    let output = "";
+    let linkUrl = null;
+
+    linkProc.stdout.on("data", (data) => {
+      const text = data.toString();
+      console.log(`[signal-link] stdout:`, text);
+      output += text;
+
+      // Extract the sgnl:// URL
+      const match = text.match(/(sgnl:\/\/linkdevice\?[^\s\n]+)/);
+      if (match && !linkUrl) {
+        linkUrl = match[1];
+        console.log(`[signal-link] Found link URL:`, linkUrl);
+
+        // Send the URL immediately to client
+        if (!res.headersSent) {
+          res.set("Content-Type", "text/plain");
+          res.write(`LINK_URL: ${linkUrl}\n`);
+          res.write(`Scan this QR code within 5 minutes\n`);
+          res.write(`Keep this connection open while scanning\n\n`);
+          res.flush();
+        }
+      }
+    });
+
+    linkProc.stderr.on("data", (data) => {
+      const text = data.toString();
+      console.log(`[signal-link] stderr:`, text);
+      output += text;
+    });
+
+    linkProc.on("error", (err) => {
+      console.error(`[signal-link] Process error:`, err);
+      if (!res.headersSent) {
+        res.status(500).send(`Process error: ${err.message}`);
+      }
+    });
+
+    linkProc.on("close", (code) => {
+      console.log(`[signal-link] Process exited with code ${code}`);
+      if (res.writable) {
+        res.write(`\nLink process exited (code: ${code})\n`);
+        res.end(output);
+      }
+    });
+
+    // Keep the connection alive for up to 5 minutes to allow scanning
+    setTimeout(() => {
+      if (!linkProc.killed) {
+        console.log(`[signal-link] Timeout, killing link process`);
+        linkProc.kill();
+      }
+      if (res.writable) {
+        res.end("\nTimeout - please try again");
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
   } catch (err) {
     console.error(`[signal-link] Error:`, err);
     res.status(500).send(String(err));
