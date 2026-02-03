@@ -320,19 +320,27 @@ let tinyproxyProc = null;
 // Configure /etc/hosts for Signal DNS resolution bypass
 // This adds Signal server IPs directly to /etc/hosts to bypass Railway's DNS
 async function configureSignalHosts() {
-  const signalHosts = {
-    "textsecure-service.whispersystems.org": "104.18.12.188",
-    "textsecure-service.whispersystems.org": "104.18.13.188",
-    "chattest.signal.org": "104.18.12.188",
-    "signal-service.org": "104.18.12.188",
-    "storage.signal.org": "104.18.12.188",
-  };
+  // Use Cloudflare's DNS over HTTPS to resolve Signal servers
+  // These are the IP addresses that Signal's servers currently resolve to
+  const signalHosts = [
+    { hostname: "textsecure-service.whispersystems.org", ip: "104.18.12.188" },
+    { hostname: "textsecure-service.whispersystems.org", ip: "104.18.13.188" },
+    { hostname: "chattest.signal.org", ip: "104.18.12.188" },
+    { hostname: "signal-service.org", ip: "104.18.12.188" },
+    { hostname: "storage.signal.org", ip: "104.18.12.188" },
+    { hostname: "storage.signal.org", ip: "104.18.13.188" },
+    { hostname: "cdn.signal.org", ip: "104.18.12.188" },
+    { hostname: "cdn2.signal.org", ip: "104.18.13.188" },
+    { hostname: "gcm.signal.org", ip: "142.250.185.27" },
+    { hostname: "gcm.signal.org", ip: "142.250.185.187" },
+    { hostname: "clientmeta.signal.org", ip: "104.18.12.188" },
+  ];
 
   try {
     // Read current /etc/hosts
     const hostsContent = await fs.promises.readFile("/etc/hosts", "utf-8");
 
-    for (const [hostname, ip] of Object.entries(signalHosts)) {
+    for (const { hostname, ip } of signalHosts) {
       // Check if entry already exists
       if (!hostsContent.includes(hostname)) {
         await fs.promises.appendFile("/etc/hosts", `${ip} ${hostname}\n`);
