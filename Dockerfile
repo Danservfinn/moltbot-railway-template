@@ -76,11 +76,12 @@ LABEL tinyproxy.configured="2026-02-03-06-00"
 # Install signal-cli GraalVM native build (for Signal channel support)
 # Native build does NOT require Java runtime!
 # Version 0.13.18 using Linux-native.tar.gz for precompiled binary
+# Note: Native build extracts to a single binary file at /opt/signal-cli, not a directory
 ARG SIGNAL_CLI_VERSION=0.13.18
 RUN curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}-Linux-native.tar.gz" \
     | tar -xz -C /opt \
-  && ln -sf /opt/signal-cli/bin/signal-cli /usr/local/bin/signal-cli \
-  && signal-cli --version
+  && ln -sf /opt/signal-cli /usr/local/bin/signal-cli \
+  && /usr/local/bin/signal-cli --version
 
 # Install Homebrew (must run as non-root user)
 # Create a user for Homebrew installation, install it, then make it accessible to all users
