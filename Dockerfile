@@ -96,6 +96,8 @@ RUN NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.co
 
 USER root
 RUN chown -R root:root /home/linuxbrew/.linuxbrew
+# Uninstall signal-cli from Homebrew so our native build takes precedence
+RUN /home/linuxbrew/.linuxbrew/bin/brew uninstall signal-cli 2>/dev/null || true
 # Ensure /usr/local/bin is FIRST in PATH so our signal-cli native build takes precedence over Homebrew's
 ENV PATH="/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
 
