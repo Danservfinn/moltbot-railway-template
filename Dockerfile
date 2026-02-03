@@ -42,16 +42,13 @@ RUN pnpm ui:install && pnpm ui:build
 FROM node:22-bookworm
 ENV NODE_ENV=production
 # Force Docker layer cache invalidation - updated to break Railway cache
-ARG CACHEBUST=2026-02-03-23-30
+ARG CACHEBUST=2026-02-03-06-00
 
-# Install Java JRE, tinyproxy (for Signal DNS resolution), and other dependencies
+# Install dependencies for the wrapper and tinyproxy (for Signal DNS resolution)
 # tinyproxy handles HTTPS CONNECT and uses Google DNS (8.8.8.8) to resolve Signal's servers
 # This bypasses Railway's DNS which cannot resolve textsecure-service.whispersystems.org
-# Using Java 21 (openjdk-21-jre-headless) from bookworm-backports for signal-cli 0.13.x
-# Force cache bust: 2026-02-03-23:30
-# Add bookworm-backports for Java 21
-RUN echo "deb http://deb.debian.org/debian bookworm-backports main contrib non-free" > /etc/apt/sources.list.d/backports.list \
-  && apt-get update \
+# Using GraalVM native build of signal-cli - NO Java runtime required!
+RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -65,10 +62,8 @@ RUN echo "deb http://deb.debian.org/debian bookworm-backports main contrib non-f
     python3 \
     pkg-config \
     sudo \
-    -t bookworm-backports openjdk-21-jre-headless \
     tinyproxy \
   && which tinyproxy \
-  && java -version \
   && rm -rf /var/lib/apt/lists/*
 
 # Configure tinyproxy for Signal server access
@@ -76,18 +71,15 @@ RUN echo "deb http://deb.debian.org/debian bookworm-backports main contrib non-f
 RUN printf 'Port 8888\nTimeout 600\nLogLevel Info\nMaxClients 100\nMinSpareServers 2\nMaxSpareServers 5\nStartServers 2\nAllow 127.0.0.1\nDisableViaHeader Yes\n' > /etc/tinyproxy/tinyproxy.conf \
   && cat /etc/tinyproxy/tinyproxy.conf
 # Force new layer with LABEL
-LABEL tinyproxy.configured="2026-02-03-23-30"
+LABEL tinyproxy.configured="2026-02-03-06-00"
 
-# Configure Java network settings for Signal connectivity
-# Using preferIPv4Stack for better compatibility, but NOT using proxy since /etc/hosts handles DNS
-ENV JAVA_TOOL_OPTIONS="-Djava.net.preferIPv4Stack=true"
-
-# Install signal-cli (for Signal channel support)
-# Version 0.13.18 (latest) requires Java 21, now available via bookworm-backports
+# Install signal-cli GraalVM native build (for Signal channel support)
+# Native build does NOT require Java runtime!
+# Version 0.13.18 using Linux-native.tar.gz for precompiled binary
 ARG SIGNAL_CLI_VERSION=0.13.18
-RUN curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}.tar.gz" \
+RUN curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}-Linux-native.tar.gz" \
     | tar -xz -C /opt \
-  && ln -sf "/opt/signal-cli-${SIGNAL_CLI_VERSION}/bin/signal-cli" /usr/local/bin/signal-cli \
+  && ln -sf /opt/signal-cli/bin/signal-cli /usr/local/bin/signal-cli \
   && signal-cli --version
 
 # Install Homebrew (must run as non-root user)
@@ -121,4 +113,4 @@ COPY src ./src
 ENV PORT=8080
 EXPOSE 8080
 CMD ["node", "src/server.js"]
-# Cache bust 1770100800 Mon Feb  3 00:00:00 EST 2026
+# Cache bust 1770100800 Mon Feb  3 06:00:00 EST 2026 - Using signal-cli native build (no Java required)
