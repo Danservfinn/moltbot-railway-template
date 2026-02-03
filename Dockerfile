@@ -79,10 +79,13 @@ LABEL tinyproxy.configured="2026-02-03-06-00"
 # Note: Native build extracts to a single binary file at /opt/signal-cli, not a directory
 # Force rebuild 2026-02-03-06-15
 ARG SIGNAL_CLI_VERSION=0.13.18
+# Force cache bust with LABEL before signal-cli install
+LABEL signal-cli.install="2026-02-03-06-20-v0.13.18"
 RUN curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}-Linux-native.tar.gz" \
     | tar -xz -C /opt \
   && ln -sf /opt/signal-cli /usr/local/bin/signal-cli \
-  && /usr/local/bin/signal-cli --version
+  && /usr/local/bin/signal-cli --version \
+  && echo "signal-cli ${SIGNAL_CLI_VERSION} native build installed"
 
 # Install Homebrew (must run as non-root user)
 # Create a user for Homebrew installation, install it, then make it accessible to all users
