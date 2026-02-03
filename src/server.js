@@ -182,6 +182,28 @@ function detectAndFixCorruptedConfig() {
         }
       }
 
+      // Fix 4: Migrate Signal channel from external daemon to embedded signal-cli
+      // This fixes the Railway volume sharing limitation that prevented media attachments
+      if (config.channels?.signal) {
+        const signalChannel = config.channels.signal;
+        console.log(`[config-fix] Signal channel config:`, JSON.stringify(signalChannel, (k, v) => k === 'token' ? '***' : v));
+        const hasHttpUrl = signalChannel.httpUrl && signalChannel.httpUrl.includes('signal-cli-native.railway.internal');
+
+        if (hasHttpUrl) {
+          console.log(`[config-fix] Found external signal-cli daemon configuration (httpUrl: ${signalChannel.httpUrl})`);
+          console.log(`[config-fix] Migrating to embedded signal-cli with autoStart: true...`);
+
+          // Remove httpUrl to use embedded signal-cli
+          delete signalChannel.httpUrl;
+
+          // Ensure autoStart is enabled
+          signalChannel.autoStart = true;
+
+          console.log(`[config-fix] ✓ Signal channel migrated to embedded mode (autoStart: true)`);
+          fixed = true;
+        }
+      }
+
       // Write the fixed config back if we made changes
       if (fixed) {
         fs.writeFileSync(clawdbotConfig, JSON.stringify(config, null, 2), "utf8");
