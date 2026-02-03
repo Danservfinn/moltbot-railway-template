@@ -315,6 +315,41 @@ function isConfigured() {
 
 let gatewayProc = null;
 let gatewayStarting = null;
+let tinyproxyProc = null;
+
+// Start tinyproxy for Signal DNS resolution bypass
+// tinyproxy runs on localhost:8888 and uses system DNS to resolve Signal's servers
+// This bypasses Railway's DNS which cannot resolve textsecure-service.whispersystems.org
+function startTinyproxy() {
+  if (tinyproxyProc) return; // Already running
+
+  console.log("[tinyproxy] starting on 127.0.0.1:8888 for Signal DNS resolution");
+
+  tinyproxyProc = childProcess.spawn("tinyproxy", ["-d", "-c", "/etc/tinyproxy/tinyproxy.conf"], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  tinyproxyProc.stdout.on("data", (data) => {
+    console.log(`[tinyproxy] ${data.toString().trim()}`);
+  });
+
+  tinyproxyProc.stderr.on("data", (data) => {
+    console.log(`[tinyproxy] ${data.toString().trim()}`);
+  });
+
+  tinyproxyProc.on("error", (err) => {
+    console.error(`[tinyproxy] error: ${err.message}`);
+    tinyproxyProc = null;
+  });
+
+  tinyproxyProc.on("exit", (code, signal) => {
+    console.log(`[tinyproxy] exited code=${code} signal=${signal}`);
+    tinyproxyProc = null;
+  });
+
+  // Give tinyproxy a moment to start
+  return sleep(500);
+}
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -350,6 +385,10 @@ async function startGateway() {
 
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+
+  // Start tinyproxy for Signal DNS resolution bypass
+  // This must be running before signal-cli can connect to Signal's servers
+  await startTinyproxy();
 
   // Sync wrapper token to openclaw.json before every gateway start.
   // This ensures the gateway's config-file token matches what the wrapper injects via proxy.
@@ -453,6 +492,24 @@ async function ensureGatewayRunning() {
 
 async function restartGateway() {
   console.log("[gateway] Restarting gateway...");
+
+  // Kill tinyproxy process tracked by wrapper
+  if (tinyproxyProc) {
+    console.log("[tinyproxy] Killing proxy process");
+    try {
+      tinyproxyProc.kill("SIGTERM");
+    } catch {
+      // ignore
+    }
+    tinyproxyProc = null;
+  }
+
+  // Kill any other tinyproxy processes
+  try {
+    await runCmd("pkill", ["-f", "tinyproxy"]);
+  } catch {
+    // ignore
+  }
 
   // Kill gateway process tracked by wrapper
   if (gatewayProc) {

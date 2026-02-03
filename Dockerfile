@@ -42,16 +42,12 @@ RUN pnpm ui:install && pnpm ui:build
 FROM node:22-bookworm
 ENV NODE_ENV=production
 
-# Configure DNS for Signal domains (Railway's DNS cannot resolve textsecure-service.whispersystems.org)
-# Using known Signal service IPs (may need updates)
-RUN echo "104.18.27.44 textsecure-service.whispersystems.org" >> /etc/hosts \
-  && echo "104.18.27.44 chattest.signal.org" >> /etc/hosts \
-  && echo "104.18.27.44 signal-service.org" >> /etc/hosts
-
-# Install Java JRE (required for signal-cli) and other dependencies
+# Install Java JRE, tinyproxy (for Signal DNS resolution), and other dependencies
+# tinyproxy handles HTTPS CONNECT and uses Google DNS (8.8.8.8) to resolve Signal's servers
+# This bypasses Railway's DNS which cannot resolve textsecure-service.whispersystems.org
 # Using default-jre (Java 17) which is compatible with signal-cli 0.12.8
 RUN apt-get update \
-  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  && DEBIAN FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     build-essential \
@@ -65,7 +61,22 @@ RUN apt-get update \
     pkg-config \
     sudo \
     default-jre \
+    tinyproxy \
   && rm -rf /var/lib/apt/lists/*
+
+# Configure tinyproxy for Signal server access
+# Listen on localhost, allow connections from localhost, enable upstream DNS
+RUN echo "Listen 127.0.0.1:8888" > /etc/tinyproxy/tinyproxy.conf \
+  && echo "Allow 127.0.0.1" >> /etc/tinyproxy/tinyproxy.conf \
+  && echo "DisableViaHeader Yes" >> /etc/tinyproxy/tinyproxy.conf \
+  && echo "Timeout 60" >> /etc/tinyproxy/tinyproxy.conf \
+  && echo "MaxClients 100" >> /etc/tinyproxy/tinyproxy.conf \
+  && echo "MinSpareServers 2" >> /etc/tinyproxy/tinyproxy.conf \
+  && echo "MaxSpareServers 5" >> /etc/tinyproxy/tinyproxy.conf
+
+# Configure Java to use the tinyproxy for HTTP/HTTPS connections
+# This allows signal-cli to reach Signal's servers via the proxy
+ENV JAVA_TOOL_OPTIONS="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=8888 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=8888 -Djava.net.preferIPv4Stack=true"
 
 # Install signal-cli (for Signal channel support)
 # Version 0.12.8 is the last version supporting Java 17
