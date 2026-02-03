@@ -317,10 +317,37 @@ let gatewayProc = null;
 let gatewayStarting = null;
 let tinyproxyProc = null;
 
+// Configure /etc/hosts for Signal DNS resolution bypass
+// This adds Signal server IPs directly to /etc/hosts to bypass Railway's DNS
+async function configureSignalHosts() {
+  const signalHosts = {
+    "textsecure-service.whispersystems.org": "104.18.12.188",
+    "textsecure-service.whispersystems.org": "104.18.13.188",
+    "chattest.signal.org": "104.18.12.188",
+    "signal-service.org": "104.18.12.188",
+    "storage.signal.org": "104.18.12.188",
+  };
+
+  try {
+    // Read current /etc/hosts
+    const hostsContent = await fs.promises.readFile("/etc/hosts", "utf-8");
+
+    for (const [hostname, ip] of Object.entries(signalHosts)) {
+      // Check if entry already exists
+      if (!hostsContent.includes(hostname)) {
+        await fs.promises.appendFile("/etc/hosts", `${ip} ${hostname}\n`);
+        console.log(`[dns] Added ${hostname} -> ${ip} to /etc/hosts`);
+      }
+    }
+  } catch (err) {
+    console.error(`[dns] Failed to configure /etc/hosts: ${err.message}`);
+  }
+}
+
 // Start tinyproxy for Signal DNS resolution bypass
 // tinyproxy runs on localhost:8888 and uses system DNS to resolve Signal's servers
 // This bypasses Railway's DNS which cannot resolve textsecure-service.whispersystems.org
-function startTinyproxy() {
+async function startTinyproxy() {
   if (tinyproxyProc) return; // Already running
 
   console.log("[tinyproxy] starting on 127.0.0.1:8888 for Signal DNS resolution");
@@ -386,9 +413,17 @@ async function startGateway() {
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
 
-  // Start tinyproxy for Signal DNS resolution bypass
+  // Configure /etc/hosts for Signal DNS resolution bypass
+  // This must be done before signal-cli can connect to Signal's servers
+  await configureSignalHosts();
+
+  // Start tinyproxy for Signal DNS resolution bypass (fallback if installed)
   // This must be running before signal-cli can connect to Signal's servers
-  await startTinyproxy();
+  try {
+    await startTinyproxy();
+  } catch (err) {
+    console.log(`[tinyproxy] Not available, relying on /etc/hosts configuration: ${err.message}`);
+  }
 
   // Sync wrapper token to openclaw.json before every gateway start.
   // This ensures the gateway's config-file token matches what the wrapper injects via proxy.
