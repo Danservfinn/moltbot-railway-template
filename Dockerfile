@@ -77,6 +77,7 @@ LABEL tinyproxy.configured="2026-02-03-06-00"
 # Native build does NOT require Java runtime!
 # Version 0.13.18 using Linux-native.tar.gz for precompiled binary
 # Note: Native build extracts to a single binary file at /opt/signal-cli, not a directory
+# Force rebuild 2026-02-03-06-15
 ARG SIGNAL_CLI_VERSION=0.13.18
 RUN curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}-Linux-native.tar.gz" \
     | tar -xz -C /opt \
@@ -114,4 +115,4 @@ COPY src ./src
 ENV PORT=8080
 EXPOSE 8080
 CMD ["node", "src/server.js"]
-# Cache bust 1770100800 Mon Feb  3 06:00:00 EST 2026 - Using signal-cli native build (no Java required)
+# Cache bust 1770100900 Mon Feb  3 06:15:00 EST 2026 - Using signal-cli 0.13.18 native build (no Java required)
