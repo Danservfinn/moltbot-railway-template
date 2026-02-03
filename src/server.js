@@ -1032,6 +1032,24 @@ app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
   }
 });
 
+// Temporary endpoint to generate Signal link QR code in the running service
+// Note: Auth temporarily disabled for quick access
+app.get("/setup/api/signal-link", async (_req, res) => {
+  try {
+    console.log(`[signal-link] Generating Signal link URL...`);
+    // Run signal-cli link command
+    const result = await runCmd("signal-cli", ["link", "-n", "OpenClaw"]);
+    console.log(`[signal-link] signal-cli output:`, result.output);
+
+    // Return the raw output as text (JSON was causing encoding issues with &)
+    res.set("Content-Type", "text/plain");
+    res.send(result.output.trim());
+  } catch (err) {
+    console.error(`[signal-link] Error:`, err);
+    res.status(500).send(String(err));
+  }
+});
+
 app.get("/setup/export", requireSetupAuth, async (_req, res) => {
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
