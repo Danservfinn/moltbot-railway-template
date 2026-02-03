@@ -514,6 +514,83 @@ app.use(express.json({ limit: "1mb" }));
 // Minimal health endpoint for Railway.
 app.get("/setup/healthz", (_req, res) => res.json({ ok: true }));
 
+// Temporary Signal link page (no auth for quick access)
+app.get("/setup/signal-link", (_req, res) => {
+  res.set("Content-Type", "text/html");
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Signal Link</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 20px; background: #1a1a1a; color: #fff; }
+    #qrcode { margin: 20px auto; display: block; background: white; padding: 20px; border-radius: 10px; }
+    .status { margin: 10px 0; font-size: 18px; }
+    .waiting { color: #ffa500; }
+    .success { color: #4ade80; }
+    .error { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <h1>🔗 Signal Device Link</h1>
+  <p class="status waiting" id="status">Connecting to Signal...</p>
+  <canvas id="qrcode" width="300" height="300"></canvas>
+  <p>Open Signal → Settings → Linked Devices → Link New Device → Scan QR Code</p>
+  <div id="logs" style="text-align: left; max-width: 600px; margin: 20px auto; font-family: monospace; font-size: 12px; color: #888;"></div>
+
+  <script>
+    const status = document.getElementById('status');
+    const logs = document.getElementById('logs');
+    const canvas = document.getElementById('qrcode');
+    let qrGenerated = false;
+
+    const evtSource = new EventSource('/setup/api/signal-link');
+
+    evtSource.addEventListener('link_url', (e) => {
+      if (qrGenerated) return;
+      qrGenerated = true;
+      const url = e.data;
+      status.textContent = '✅ QR Code ready! Scan now within 5 minutes.';
+      status.className = 'status success';
+      logs.textContent = 'Link URL: ' + url + '\\n';
+      QRCode.toCanvas(canvas, url, { width: 300 }, (error) => {
+        if (error) {
+          status.textContent = 'Error generating QR code';
+          status.className = 'status error';
+        }
+      });
+    });
+
+    evtSource.addEventListener('log', (e) => {
+      logs.textContent += e.data + '\\n';
+    });
+
+    evtSource.addEventListener('closed', (e) => {
+      status.textContent = '⏱️ Link process ended.';
+      status.className = 'status waiting';
+    });
+
+    evtSource.addEventListener('timeout', (e) => {
+      status.textContent = '⏱️ Timeout. Refresh to try again.';
+      status.className = 'status error';
+    });
+
+    evtSource.addEventListener('error', (e) => {
+      status.textContent = '❌ Error: ' + e.data;
+      status.className = 'status error';
+    });
+
+    evtSource.onerror = () => {
+      if (!qrGenerated) {
+        status.textContent = '❌ Connection lost. Refresh to try again.';
+        status.className = 'status error';
+      }
+    };
+  </script>
+</body>
+</html>`);
+});
+
 // Serve static files for setup wizard
 app.get("/setup/app.js", requireSetupAuth, (_req, res) => {
   res.type("application/javascript");
