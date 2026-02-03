@@ -41,6 +41,8 @@ RUN pnpm ui:install && pnpm ui:build
 # Runtime image
 FROM node:22-bookworm
 ENV NODE_ENV=production
+# Force Docker layer cache invalidation for dependencies installation
+ARG CACHEBUST=2026-02-03-22-35
 
 # Install Java JRE, tinyproxy (for Signal DNS resolution), and other dependencies
 # tinyproxy handles HTTPS CONNECT and uses Google DNS (8.8.8.8) to resolve Signal's servers
