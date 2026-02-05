@@ -117,6 +117,20 @@ RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /openclaw/dist/entry.js "$@"'
 
 COPY src ./src
 
+# Signal device data - pre-linked account +15165643945
+# Data generated locally and embedded in image for Railway deployment
+RUN mkdir -p /data/.signal
+COPY .signal-data/signal-data.tar.gz /tmp/signal-data.tar.gz
+RUN if [ -f /tmp/signal-data.tar.gz ]; then \
+    tar -xzf /tmp/signal-data.tar.gz -C /data/.signal \
+    && chown -R root:root /data/.signal \
+    && chmod -R 755 /data/.signal \
+    && rm /tmp/signal-data.tar.gz \
+    && echo "✓ Signal data imported: $(signal-cli listAccounts 2>/dev/null | grep -o '+[0-9]*' || echo 'checking at runtime')"; \
+    else \
+    echo "⚠ No Signal data to import"; \
+    fi
+
 ENV PORT=8080
 EXPOSE 8080
 CMD ["node", "src/server.js"]

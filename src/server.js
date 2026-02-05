@@ -266,6 +266,40 @@ function detectAndFixCorruptedConfig() {
               maxConcurrent: 8
             }
           }
+        },
+        channels: {
+          signal: {
+            enabled: true,
+            account: "+15165643945",
+            cliPath: "/usr/local/bin/signal-cli",
+            autoStart: true,
+            startupTimeoutMs: 120000,
+            dmPolicy: "pairing",
+            groupPolicy: "allowlist",
+            allowFrom: ["+15165643945", "+19194133445"],
+            groupAllowFrom: ["+19194133445"],
+            historyLimit: 50,
+            textChunkLimit: 4000,
+            ignoreStories: true
+          }
+        },
+        session: {
+          scope: "per-sender",
+          signalRouting: {
+            enabled: true,
+            defaultAgent: "main",
+            sessionIsolation: true,
+            responseRouting: {
+              mode: "sender-matched",
+              description: "Agent responses are routed back to the original Signal sender session"
+            }
+          },
+          reset: {
+            mode: "daily",
+            graceful: true,
+            drainTimeoutSeconds: 300,
+            maxPendingTasksBeforeForceReset: 10
+          }
         }
       };
 
