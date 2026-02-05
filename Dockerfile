@@ -119,14 +119,15 @@ COPY src ./src
 
 # Signal device data - pre-linked account +15165643945
 # Data generated locally and embedded in image for Railway deployment
-RUN mkdir -p /data/.signal
+# signal-cli expects data in /data/.local/share/signal-cli (XDG data dir)
+RUN mkdir -p /data/.local/share/signal-cli
 COPY .signal-data/signal-data.tar.gz /tmp/signal-data.tar.gz
 RUN if [ -f /tmp/signal-data.tar.gz ]; then \
-    tar -xzf /tmp/signal-data.tar.gz -C /data/.signal \
-    && chown -R root:root /data/.signal \
-    && chmod -R 755 /data/.signal \
+    tar -xzf /tmp/signal-data.tar.gz -C /data/.local/share/signal-cli \
+    && chown -R root:root /data/.local/share/signal-cli \
+    && chmod -R 755 /data/.local/share/signal-cli \
     && rm /tmp/signal-data.tar.gz \
-    && echo "✓ Signal data imported: $(signal-cli listAccounts 2>/dev/null | grep -o '+[0-9]*' || echo 'checking at runtime')"; \
+    && echo "✓ Signal data imported to /data/.local/share/signal-cli"; \
     else \
     echo "⚠ No Signal data to import"; \
     fi
